@@ -40,6 +40,9 @@ int main(int argc, char** argv) {
 
 		detector.detect_eye();
 		detector.show_frame();
+
+		detector.record_data(0);
+
 	}
 
 	system("pause");

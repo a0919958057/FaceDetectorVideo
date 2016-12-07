@@ -2,6 +2,10 @@
 
 #include<opencv2\opencv.hpp>
 #include<iostream>
+#include <windows.h>
+#include <iomanip>
+#include <fstream>
+
 
 using namespace cv;
 using namespace std;
@@ -49,16 +53,34 @@ protected:
 
 	void rot90(Mat&, RotFlag);
 
-	bool blank_detect();
+	bool detect_blink();
 
 	VideoCapture* m_cap;
 	Mat m_frame;
+	Mat m_eye;
+	Mat m_eye_window;
 	Size cap_size;
 	RotFlag cap_rot;
 	CascadeClassifier* m_classifier;
 	std::vector<Rect>* detected_object;
+	Rect m_reg_eye;
+
+	double minVal;
+	Point minLoc;
+
+	static EyeDetector* self;
 
 	unsigned proc_count;
 
+	bool is_datafile_open;
+	fstream app_blink_data;
+private:
+	LARGE_INTEGER tStart, tEnd, ts;
+
+public:
+	static void onMouse(int aEvent, int x, int y, int, void*);
+	void doMemberMouseCallback(int aEvent, int x, int y, int flag);
+	bool record_data(int data_id);
+	bool open_recordfile(int data_id);
 };
 

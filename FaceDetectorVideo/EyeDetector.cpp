@@ -2,13 +2,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+EyeDetector* EyeDetector::self;
 
 EyeDetector::EyeDetector() :
 	cap_size(640, 480),
 	m_cap(nullptr),
 	cap_rot(RotFlag::ROT_0),
 	m_classifier(nullptr),
-	proc_count(0) {
+	proc_count(0),
+	is_datafile_open(false) {
 
 	// Setup the Window property
 	namedWindow(WINDOW_NAME_ORIGIN_IMAGE, WINDOW_AUTOSIZE);
@@ -23,7 +25,7 @@ EyeDetector::EyeDetector() :
 
 
 EyeDetector::~EyeDetector() {
-	
+	if (app_blink_data.is_open()) app_blink_data.close();
 }
 
 void EyeDetector::init(VideoCapture &cap) {
@@ -41,6 +43,9 @@ void EyeDetector::init(VideoCapture &cap) {
 
 		reportStatus(EyeDetectorStatus::CAMERA_OPENED, cap_info);
 	}
+
+	self = this;
+	setMouseCallback(WINDOW_NAME_EYE, onMouse, 0);
 
 	return;
 }
@@ -74,6 +79,8 @@ bool EyeDetector::update_image() {
 }
 
 void EyeDetector::show_frame() {
+	bool isDetected_blink(false);
+
 	imshow(WINDOW_NAME_ORIGIN_IMAGE, m_frame);
 	Mat modify_frame;
 	modify_frame = m_frame.clone();
@@ -88,8 +95,36 @@ void EyeDetector::show_frame() {
 				rectangle(modify_frame, eyes, CV_RGB(0, 0, 255), 2);
 			}
 
+			// Register the eye frame
+			m_eye = Mat(m_frame, eyes);
+			// Register the eye search frame
+			Rect eyes_sch_win(eyes);
+			eyes.width += 50;
+			eyes.height += 50;
+			eyes.x -= 25;
+			eyes.y -= 25;
+			m_eye_window = Mat(m_frame, eyes);
+			cvtColor(m_eye_window, m_eye_window, CV_RGB2GRAY);
+
+			Mat hsv_eye;
+			cvtColor(m_eye, hsv_eye, CV_RGB2HSV);
+			cvtColor(m_eye, m_eye, CV_RGB2GRAY);
+			//vector<Mat> hsv_planes;
+			//split(hsv_eye, hsv_planes);
+			//Mat v_hist;
+
+			////equalizeHist(hsv_planes[2], v_hist);
+			//threshold(hsv_planes[2], v_hist, 30, 255, ThresholdTypes::THRESH_BINARY);
+			//imshow("Equalized Image", v_hist);
+
+			/********* Detect Eye *********/
+			isDetected_blink = detect_blink();
+			/******************************/
+
+			//imshow(WINDOW_NAME_EYE, hsv_planes[2]);
+
 			/****** Add the text on image ******/
-			char str_buffer[20] = { 0 };
+			char str_buffer[64] = { 0 };
 			sprintf_s(str_buffer, "(%2.2f,%2.2f)", 
 				(double)cap_size.height/ (double)eyes.width, 
 				(double)cap_size.width/ (double)eyes.height);
@@ -98,19 +133,12 @@ void EyeDetector::show_frame() {
 			putText(modify_frame, String(str_buffer), Point(0, 20), FONT_HERSHEY_SIMPLEX, 0.7, CV_RGB(255, 255, 255), 1.5);
 			sprintf_s(str_buffer, "Proc Count %d", proc_count);
 			putText(modify_frame, String(str_buffer), Point(0, 40), FONT_HERSHEY_SIMPLEX, 0.7, CV_RGB(255, 255, 255), 1.5);
+			sprintf_s(str_buffer, "Compare value = %f", minVal);
+			putText(modify_frame, String(str_buffer), Point(0, 60), FONT_HERSHEY_SIMPLEX, 0.7, CV_RGB(255, 255, 255), 1.5);
 			/***********************************/
-			Mat eye_roi(m_frame, eyes);
-			Mat hsv_eye;
-			cvtColor(eye_roi, hsv_eye, CV_RGB2HSV);
-			vector<Mat> hsv_planes;
-			split(hsv_eye, hsv_planes);
-			Mat v_hist;
-			
-			//equalizeHist(hsv_planes[2], v_hist);
-			threshold(hsv_planes[2], v_hist, 30, 255, ThresholdTypes::THRESH_BINARY);
-			imshow("Equalized Image", v_hist);
 
-			imshow(WINDOW_NAME_EYE, hsv_planes[2]);
+			
+			
 
 		}
 		imshow(WINDOW_NAME_MODIFY_IMAGE, modify_frame);
@@ -163,7 +191,34 @@ void EyeDetector::rot90(Mat &image, RotFlag flag) {
 	}
 }
 
-bool EyeDetector::blank_detect() {
+bool EyeDetector::detect_blink() {
+	static int image_count(0);
+	stringstream ss;
+	ss << ".//template//temp" << image_count << ".jpg";
+	string str;
+	ss >> str;
+
+	Mat image_template = imread(str.c_str(),CV_8U);
+
+
+	// Using Template match
+	Mat result;
+	//blur(m_eye_window, m_eye_window, Size(10, 10));
+	//blur(image_template, image_template, Size(10, 10));
+
+	
+	matchTemplate(m_eye_window, image_template, result, CV_TM_SQDIFF_NORMED);
+	minMaxLoc(result, &minVal, 0, &minLoc, 0);
+
+	// Using Histgram Compare
+
+
+
+
+
+	//double result = compareHist(image_template, m_eye, HistCompMethods::HISTCMP_CORREL);
+
+	if (minVal > 4744717) return true;
 
 	return false;
 }
@@ -204,4 +259,57 @@ void EyeDetector::reportStatus(EyeDetectorStatus status, const char (&metaMsg)[S
 	cout << str << endl;
 	
 	return;
+}
+
+
+void EyeDetector::onMouse(int aEvent, int x, int y, int flags, void* param) { 
+
+	self->doMemberMouseCallback(aEvent, x, y, flags);
+	return;
+}
+
+void EyeDetector::doMemberMouseCallback(int aEvent, int x, int y, int flags) {
+	static int image_count(0);
+	if (aEvent != EVENT_LBUTTONDOWN)
+		return;
+
+	stringstream ss;
+	ss << ".//template//temp" << image_count++ << ".jpg";
+	string str;
+	ss >> str;
+
+	imwrite(str.c_str(), m_eye);
+}
+
+
+bool EyeDetector::record_data(int data_id) {
+	if (!is_datafile_open) {
+		is_datafile_open = open_recordfile(data_id);
+		return false;
+	}
+
+	// Get past time
+	QueryPerformanceCounter(&tEnd);
+	float m_time = ((tEnd.QuadPart - tStart.QuadPart) / (double)(ts.QuadPart));
+
+	app_blink_data
+		<< setw(15) << setprecision(6) << m_time
+		<< setw(15) << setprecision(6) << minVal
+		<< endl;
+
+}
+
+
+bool EyeDetector::open_recordfile(int data_id) {
+	stringstream ss;
+	ss << ".//data//data" << data_id << ".txt";
+	string str;
+	ss >> str;
+
+	app_blink_data.open(str.c_str(), ios::out);
+	
+	if (app_blink_data.is_open()) {
+		QueryPerformanceFrequency(&ts);
+		QueryPerformanceCounter(&tStart);
+	}
 }
