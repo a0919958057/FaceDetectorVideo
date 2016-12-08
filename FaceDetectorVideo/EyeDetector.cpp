@@ -121,7 +121,7 @@ void EyeDetector::show_frame() {
 			isDetected_blink = detect_blink();
 			/******************************/
 
-			//imshow(WINDOW_NAME_EYE, hsv_planes[2]);
+			imshow(WINDOW_NAME_EYE, m_eye);
 
 			/****** Add the text on image ******/
 			char str_buffer[64] = { 0 };
@@ -211,12 +211,29 @@ bool EyeDetector::detect_blink() {
 	minMaxLoc(result, &minVal, 0, &minLoc, 0);
 
 	// Using Histgram Compare
+	MatND hist_base;
+	MatND hist_test;
+	MatND error;
 
+	/// Using 128 bins for gray value
+	int g_bins = 128;
+	int histSize[] = { g_bins };
 
+	float s_ranges[] = { 0, 256 };
+	const float* range[] = { s_ranges };
 
+	int channels[] = { 0 };
+	calcHist(&image_template, 1, channels, Mat(), hist_base , 1, histSize, range);
+	normalize(hist_base, hist_base, 0, 1, NORM_MINMAX, -1, Mat());
 
+	calcHist(&m_eye, 1, channels, Mat(), hist_test, 1, histSize, range);
+	normalize(hist_test, hist_test, 0, 1, NORM_MINMAX, -1, Mat());
+
+	absdiff(hist_base, hist_test, error);
 
 	//double result = compareHist(image_template, m_eye, HistCompMethods::HISTCMP_CORREL);
+	Scalar sumError = sum(error);
+	absSum = sumError[0];
 
 	if (minVal > 4744717) return true;
 
@@ -273,12 +290,7 @@ void EyeDetector::doMemberMouseCallback(int aEvent, int x, int y, int flags) {
 	if (aEvent != EVENT_LBUTTONDOWN)
 		return;
 
-	stringstream ss;
-	ss << ".//template//temp" << image_count++ << ".jpg";
-	string str;
-	ss >> str;
-
-	imwrite(str.c_str(), m_eye);
+	save_eyeimage(image_count++);
 }
 
 
@@ -294,7 +306,7 @@ bool EyeDetector::record_data(int data_id) {
 
 	app_blink_data
 		<< setw(15) << setprecision(6) << m_time
-		<< setw(15) << setprecision(6) << minVal
+		<< setw(15) << setprecision(6) << absSum
 		<< endl;
 
 }
@@ -311,5 +323,18 @@ bool EyeDetector::open_recordfile(int data_id) {
 	if (app_blink_data.is_open()) {
 		QueryPerformanceFrequency(&ts);
 		QueryPerformanceCounter(&tStart);
+		return true;
 	}
+	
+	return false;
+}
+
+
+void EyeDetector::save_eyeimage(int image_id) {
+	stringstream ss;
+	ss << ".//template//temp" << image_id++ << ".jpg";
+	string str;
+	ss >> str;
+
+	imwrite(str.c_str(), m_eye);
 }

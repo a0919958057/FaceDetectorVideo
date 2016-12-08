@@ -68,6 +68,8 @@ protected:
 	double minVal;
 	Point minLoc;
 
+	double absSum;
+
 	static EyeDetector* self;
 
 	unsigned proc_count;
@@ -82,5 +84,6 @@ public:
 	void doMemberMouseCallback(int aEvent, int x, int y, int flag);
 	bool record_data(int data_id);
 	bool open_recordfile(int data_id);
+	void save_eyeimage(int image_id);
 };
 
